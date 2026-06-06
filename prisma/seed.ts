@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
-import { UserRole } from "@prisma/client";
+import { UserRole } from "../src/types/enums";
 import { prisma } from "../src/db/prisma";
 
 dotenv.config();

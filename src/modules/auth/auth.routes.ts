@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { Router } from "express";
-import { UserRole } from "@prisma/client";
+import { UserRole } from "../../types/enums";
 import { prisma } from "../../db/prisma";
 import { asyncHandler } from "../../shared/async-handler";
 import { requireAuth } from "./auth.middleware";

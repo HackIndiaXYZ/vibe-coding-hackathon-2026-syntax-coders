@@ -1,4 +1,4 @@
-import { RiskLevel } from "@prisma/client";
+import { RiskLevel } from "../../types/enums";
 
 type TriageResult = {
   aiSummary: string;

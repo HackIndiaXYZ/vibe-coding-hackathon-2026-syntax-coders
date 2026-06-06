@@ -1,4 +1,4 @@
-import { DoctorVerificationStatus } from "@prisma/client";
+import { DoctorVerificationStatus } from "../../types/enums";
 import { z } from "zod";
 
 export const updateDoctorVerificationSchema = z.object({

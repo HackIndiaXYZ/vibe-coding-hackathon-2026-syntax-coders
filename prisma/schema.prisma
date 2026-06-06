@@ -3,40 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
-}
-
-enum UserRole {
-  PATIENT
-  DOCTOR
-  ADMIN
-}
-
-enum DoctorVerificationStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
-
-enum AppointmentStatus {
-  REQUESTED
-  CONFIRMED
-  COMPLETED
-  CANCELLED
-}
-
-enum RiskLevel {
-  LOW
-  MEDIUM
-  HIGH
-  EMERGENCY
-}
-
-enum EscalationStatus {
-  OPEN
-  ASSIGNED
-  RESOLVED
 }
 
 model User {
@@ -45,7 +13,7 @@ model User {
   email        String   @unique
   phone        String?  @unique
   passwordHash String
-  role         UserRole
+  role         String
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -74,15 +42,15 @@ model Patient {
 }
 
 model Doctor {
-  id                 String                   @id @default(cuid())
-  userId             String                   @unique
+  id                 String   @id @default(cuid())
+  userId             String   @unique
   specialization     String
-  licenseNumber      String                   @unique
-  experienceYears    Int                      @default(0)
-  verificationStatus DoctorVerificationStatus @default(PENDING)
+  licenseNumber      String   @unique
+  experienceYears    Int      @default(0)
+  verificationStatus String   @default("PENDING")
   consultationFee    Int?
-  createdAt          DateTime                 @default(now())
-  updatedAt          DateTime                 @updatedAt
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   appointments   Appointment[]
@@ -91,13 +59,14 @@ model Doctor {
 }
 
 model MedicalReport {
-  id          String   @id @default(cuid())
-  patientId   String
-  fileUrl     String
-  fileHash    String?
-  storageType String   @default("LOCAL")
-  reportType  String?
-  uploadedAt  DateTime @default(now())
+  id            String   @id @default(cuid())
+  patientId     String
+  fileUrl       String
+  fileHash      String?
+  storageType   String   @default("LOCAL")
+  reportType    String?
+  extractedText String?
+  uploadedAt    DateTime @default(now())
 
   patient    Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
   aiAnalyses AiAnalysis[]
@@ -109,7 +78,7 @@ model AiAnalysis {
   reportId          String?
   symptomsInput     String?
   aiSummary         String
-  riskLevel         RiskLevel
+  riskLevel         String
   confidenceScore   Float?
   recommendedAction String
   needsDoctorReview Boolean   @default(false)
@@ -121,14 +90,14 @@ model AiAnalysis {
 }
 
 model Appointment {
-  id          String            @id @default(cuid())
+  id          String   @id @default(cuid())
   patientId   String
   doctorId    String
-  status      AppointmentStatus @default(REQUESTED)
+  status      String   @default("REQUESTED")
   scheduledAt DateTime
   reason      String?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
   doctor       Doctor        @relation(fields: [doctorId], references: [id], onDelete: Cascade)
@@ -150,14 +119,14 @@ model Consultation {
 }
 
 model EmergencyCase {
-  id               String           @id @default(cuid())
-  patientId         String
-  aiAnalysisId      String?
-  severity          RiskLevel
-  escalationStatus  EscalationStatus @default(OPEN)
-  assignedDoctorId  String?
-  createdAt         DateTime         @default(now())
-  resolvedAt        DateTime?
+  id               String    @id @default(cuid())
+  patientId        String
+  aiAnalysisId     String?
+  severity         String
+  escalationStatus String    @default("OPEN")
+  assignedDoctorId String?
+  createdAt        DateTime  @default(now())
+  resolvedAt       DateTime?
 
   patient        Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
   aiAnalysis     AiAnalysis? @relation(fields: [aiAnalysisId], references: [id], onDelete: SetNull)

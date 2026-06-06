@@ -1,4 +1,4 @@
-import { AppointmentStatus } from "@prisma/client";
+import { AppointmentStatus } from "../../types/enums";
 import { Router } from "express";
 import { prisma } from "../../db/prisma";
 import { AppError } from "../../shared/app-error";

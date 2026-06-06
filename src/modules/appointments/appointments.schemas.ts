@@ -1,4 +1,4 @@
-import { AppointmentStatus } from "@prisma/client";
+import { AppointmentStatus } from "../../types/enums";
 import { z } from "zod";
 
 export const createAppointmentSchema = z.object({
