@@ -66,6 +66,11 @@ model MedicalReport {
   storageType   String   @default("LOCAL")
   reportType    String?
   extractedText String?
+  fileName      String?
+  mimeType      String?
+  fileSize      Int?
+  ipfsCid       String?
+  ipfsUrl       String?
   uploadedAt    DateTime @default(now())
 
   patient    Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -125,6 +130,10 @@ model EmergencyCase {
   severity         String
   escalationStatus String    @default("OPEN")
   assignedDoctorId String?
+  beaconToken      String?   @unique
+  beaconUrl        String?
+  expiresAt        DateTime?
+  isActive         Boolean   @default(true)
   createdAt        DateTime  @default(now())
   resolvedAt       DateTime?
 

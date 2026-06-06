@@ -1,7 +1,4 @@
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-// pdf-parse is a CJS module — use createRequire for proper interop under tsx/ESM
-const pdfParse = require("pdf-parse");
+import pdfParse from "pdf-parse";
 
 /**
  * Extracts plain text from a PDF file buffer.

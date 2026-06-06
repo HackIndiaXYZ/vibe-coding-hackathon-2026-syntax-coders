@@ -8,8 +8,11 @@ import { appointmentsRouter } from "./modules/appointments/appointments.routes";
 import { authRouter } from "./modules/auth/auth.routes";
 import { doctorsRouter } from "./modules/doctors/doctors.routes";
 import { healthRouter } from "./modules/health/health.routes";
-import { reportsRouter } from "./modules/reports/reports.routes";
+import reportsRoutes from "./modules/reports/reports.routes";
 import { syncRouter } from "./modules/sync/sync.routes";
+import aiChatRoutes from "./modules/ai-chat/ai-chat.routes";
+import emergencyRoutes from "./modules/emergency/emergency.routes";
+import consentRoutes from "./modules/consent/consent.routes";
 import { errorHandler } from "./shared/error-handler";
 
 export const app = express();
@@ -23,12 +26,16 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 app.use("/health", healthRouter);
 app.use("/auth", authRouter);
-app.use("/reports", reportsRouter);
 app.use("/ai", aiRouter);
 app.use("/admin", adminRouter);
 app.use("/doctors", doctorsRouter);
 app.use("/appointments", appointmentsRouter);
 app.use("/sync", syncRouter);
+
+app.use("/api/ai-chat", aiChatRoutes);
+app.use("/api/reports", reportsRoutes);
+app.use("/api/emergency", emergencyRoutes);
+app.use("/api/consent", consentRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
