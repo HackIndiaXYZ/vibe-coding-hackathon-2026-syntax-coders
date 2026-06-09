@@ -4,18 +4,18 @@
   "private": true,
   "description": "LifeLink backend API for AI-assisted healthcare coordination.",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "seed": "tsx prisma/seed.ts",
-    "server": "tsx watch src/server.ts"
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@pinata/sdk": "^2.1.0",
     "@prisma/client": "^6.0.0",
     "bcryptjs": "^2.4.3",
@@ -27,11 +27,8 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.1.1",
-    "next": "^15.5.19",
     "pdf-parse": "^2.4.5",
     "qrcode": "^1.5.4",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -41,8 +38,6 @@
     "@types/jsonwebtoken": "^9.0.7",
     "@types/multer": "^2.1.0",
     "@types/node": "^22.10.2",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
     "prisma": "^6.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"

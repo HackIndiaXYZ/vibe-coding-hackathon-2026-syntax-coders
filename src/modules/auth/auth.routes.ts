@@ -113,6 +113,38 @@ authRouter.get("/me", requireAuth, asyncHandler(async (req, res) => {
   res.json({ user });
 }));
 
+authRouter.put("/patient/profile", requireAuth, asyncHandler(async (req, res) => {
+  const userId = req.auth!.sub;
+  const { bloodGroup, allergies, emergencyContact, gender, dateOfBirth } = req.body;
+
+  const patient = await prisma.patient.findUnique({
+    where: { userId }
+  });
+
+  if (!patient) {
+    res.status(404).json({ message: "Patient profile not found" });
+    return;
+  }
+
+  await prisma.patient.update({
+    where: { id: patient.id },
+    data: {
+      bloodGroup: bloodGroup !== undefined ? bloodGroup : undefined,
+      allergies: allergies !== undefined ? allergies : undefined,
+      emergencyContact: emergencyContact !== undefined ? emergencyContact : undefined,
+      gender: gender !== undefined ? gender : undefined,
+      dateOfBirth: dateOfBirth !== undefined ? new Date(dateOfBirth) : undefined,
+    }
+  });
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: userResponseSelect
+  });
+
+  res.json({ user });
+}));
+
 const userResponseSelect = {
   id: true,
   name: true,
@@ -120,7 +152,27 @@ const userResponseSelect = {
   phone: true,
   role: true,
   isActive: true,
-  createdAt: true
+  createdAt: true,
+  patient: {
+    select: {
+      id: true,
+      dateOfBirth: true,
+      gender: true,
+      bloodGroup: true,
+      allergies: true,
+      emergencyContact: true
+    }
+  },
+  doctor: {
+    select: {
+      id: true,
+      specialization: true,
+      licenseNumber: true,
+      experienceYears: true,
+      verificationStatus: true,
+      consultationFee: true
+    }
+  }
 } as const;
 
 function createTokenPair(userId: string, role: UserRole) {

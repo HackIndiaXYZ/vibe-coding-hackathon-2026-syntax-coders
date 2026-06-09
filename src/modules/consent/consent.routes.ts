@@ -10,5 +10,7 @@ consentRoutes.use(requireAuth, requireRole("PATIENT"));
 consentRoutes.post("/grant", asyncHandler(consentController.grant));
 consentRoutes.post("/revoke", asyncHandler(consentController.revoke));
 consentRoutes.get("/check/:doctorAddress", asyncHandler(consentController.check));
+consentRoutes.get("/logs", asyncHandler(consentController.getLogs));
+consentRoutes.get("/active", asyncHandler(consentController.getActiveConsents));
 
 export default consentRoutes;
