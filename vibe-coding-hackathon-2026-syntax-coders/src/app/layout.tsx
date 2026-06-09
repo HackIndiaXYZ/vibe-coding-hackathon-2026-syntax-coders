@@ -1,11 +1,5 @@
 import type { Metadata } from "next";
-import { Manrope } from "next/font/google";
 import "./globals.css";
-
-const manrope = Manrope({
-  variable: "--font-manrope",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "LifeLink - AI-Powered Healthcare Coordination",
@@ -20,9 +14,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${manrope.variable} font-sans h-full antialiased`}
+      className="font-sans h-full antialiased"
     >
-      <body className="min-h-full flex flex-col bg-background text-brand-heading selection:bg-brand-mint selection:text-white">{children}</body>
+      <head>
+        <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+      </head>
+      <body className="min-h-full flex flex-col bg-[#FDF6EE] text-[#1E1B2E] selection:bg-[#7C5CBF]/20 selection:text-[#7C5CBF]">{children}</body>
     </html>
   );
 }
