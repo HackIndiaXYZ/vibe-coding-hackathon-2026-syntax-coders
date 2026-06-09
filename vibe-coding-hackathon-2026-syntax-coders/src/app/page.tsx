@@ -4,6 +4,36 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 
 export default function Home() {
+  // Load dynamic theme preference
+  useEffect(() => {
+    const THEMES = {
+      'midnight-forest': { bg: '#0D1117', sidebar: '#161B22', primary: '#2D6A4F', accent: '#40916C', highlight: '#74C69D', soft: '#b7e4c7', tint: '#e8f5e9', cardBg: '#161B22', cardBorder: '#233044', textPrimary: '#F0E5D8', textMuted: '#8D97A7', heroGradient: 'linear-gradient(135deg, #2D6A4F 0%, #161B22 100%)', heroBorder: '#40916C', accentRgb: '64, 145, 108', isDark: true },
+      'dusk-lavender': { bg: '#1A1625', sidebar: '#221D30', primary: '#6E48AA', accent: '#9D65C9', highlight: '#E040FB', soft: '#f3e5f5', tint: '#fce4ec', cardBg: '#221D30', cardBorder: '#3E3754', textPrimary: '#F0E5D8', textMuted: '#9B8FAD', heroGradient: 'linear-gradient(135deg, #6E48AA 0%, #221D30 100%)', heroBorder: '#9D65C9', accentRgb: '157, 101, 201', isDark: true },
+      'arctic-slate': { bg: '#0F172A', sidebar: '#1E293B', primary: '#4A74B9', accent: '#799CD2', highlight: '#A4C2EC', soft: '#D9E5F6', tint: '#F2F6FC', cardBg: '#1E293B', cardBorder: '#334155', textPrimary: '#F8FAFC', textMuted: '#94A3B8', heroGradient: 'linear-gradient(135deg, #4A74B9 0%, #1E293B 100%)', heroBorder: '#799CD2', accentRgb: '121, 156, 210', isDark: true },
+      'ember-rose': { bg: '#1A0F0F', sidebar: '#261515', primary: '#C0392B', accent: '#E74C3C', highlight: '#FF8A80', soft: '#ffebee', tint: '#fff5f5', cardBg: '#261515', cardBorder: '#4A2B2B', textPrimary: '#F5E6E6', textMuted: '#A88585', heroGradient: 'linear-gradient(135deg, #C0392B 0%, #261515 100%)', heroBorder: '#E74C3C', accentRgb: '231, 76, 60', isDark: true },
+      'ocean-abyss': { bg: '#020813', sidebar: '#071428', primary: '#006D77', accent: '#4FA4C8', highlight: '#88C3D8', soft: '#D0ECEF', tint: '#EEF8F9', cardBg: '#071428', cardBorder: '#162D4A', textPrimary: '#E0F2FE', textMuted: '#7EA2C6', heroGradient: 'linear-gradient(135deg, #006D77 0%, #071428 100%)', heroBorder: '#4FA4C8', accentRgb: '79, 164, 200', isDark: true },
+      'golden-hour': { bg: '#FAF7F0', sidebar: '#FFF8EC', primary: '#D97706', accent: '#F59E0B', highlight: '#FDE68A', soft: '#fef3c7', tint: '#fffbeb', cardBg: '#FFFFFF', cardBorder: '#EADEC9', textPrimary: '#1E1B2E', textMuted: '#6B7280', heroGradient: 'linear-gradient(135deg, #D97706 0%, #FFF8EC 100%)', heroBorder: '#F59E0B', accentRgb: '245, 158, 11', isDark: false }
+    }
+    const savedTheme = localStorage.getItem('lifelink-theme') || 'ocean-abyss'
+    const activeTheme = THEMES[savedTheme as keyof typeof THEMES] || THEMES['ocean-abyss']
+    const root = document.documentElement
+    root.style.setProperty('--ll-bg', activeTheme.bg)
+    root.style.setProperty('--ll-sidebar', activeTheme.sidebar)
+    root.style.setProperty('--ll-primary', activeTheme.primary)
+    root.style.setProperty('--ll-accent', activeTheme.accent)
+    root.style.setProperty('--ll-highlight', activeTheme.highlight)
+    root.style.setProperty('--ll-soft', activeTheme.soft)
+    root.style.setProperty('--ll-tint', activeTheme.tint)
+    root.style.setProperty('--ll-card-bg', activeTheme.cardBg)
+    root.style.setProperty('--ll-card-border', activeTheme.cardBorder)
+    root.style.setProperty('--ll-text', activeTheme.textPrimary)
+    root.style.setProperty('--ll-text-muted', activeTheme.textMuted)
+    root.style.setProperty('--ll-hero-gradient', activeTheme.heroGradient)
+    root.style.setProperty('--ll-hero-border', activeTheme.heroBorder)
+    root.style.setProperty('--ll-accent-rgb', activeTheme.accentRgb)
+    root.style.setProperty('--ll-input-bg', activeTheme.isDark ? activeTheme.cardBg : '#fff')
+  }, [])
+
   // Navbar scroll shadow state
   const [scrolled, setScrolled] = useState(false)
   useEffect(() => {
@@ -85,19 +115,29 @@ export default function Home() {
   ]
 
   return (
-    <div className="min-h-screen bg-[#FDF6EE] font-sans selection:bg-[#7C5CBF]/20 selection:text-[#7C5CBF]">
+    <div className="min-h-screen font-sans" style={{ background: 'var(--ll-bg)', color: 'var(--ll-text)', transition: 'background 0.3s ease, color 0.3s ease' }}>
       <style>{`
         .hero-bg {
-          background-color: #FDF6EE;
+          background-color: var(--ll-bg);
           background-image: 
             radial-gradient(ellipse 80% 50% at 20% 20%, 
-              rgba(124,92,191,0.08) 0%, transparent 60%),
+              rgba(var(--ll-accent-rgb),0.08) 0%, transparent 60%),
             radial-gradient(ellipse 60% 40% at 80% 80%, 
-              rgba(62,207,170,0.08) 0%, transparent 60%),
+              rgba(var(--ll-accent-rgb),0.08) 0%, transparent 60%),
             radial-gradient(ellipse 40% 30% at 60% 10%, 
-              rgba(124,92,191,0.05) 0%, transparent 50%),
-            url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%237C5CBF' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+              rgba(var(--ll-accent-rgb),0.05) 0%, transparent 50%);
+          transition: background-color 0.3s ease;
         }
+        h1, h2, h3, h4, h5, h6 { color: var(--ll-text) !important; transition: color 0.3s ease; }
+        .text-gray-900 { color: var(--ll-text) !important; }
+        p, .text-gray-600, .text-gray-500 { color: var(--ll-text-muted) !important; transition: color 0.3s ease; }
+        .bg-white { background-color: var(--ll-card-bg) !important; border-color: var(--ll-card-border) !important; transition: background-color 0.3s ease, border-color 0.3s ease; }
+        .border-gray-100, .border-gray-200 { border-color: var(--ll-card-border) !important; transition: border-color 0.3s ease; }
+        .bg-gray-50, .bg-gray-100 { background-color: var(--ll-sidebar) !important; transition: background-color 0.3s ease; }
+        header { background-color: var(--ll-bg) !important; border-color: var(--ll-card-border) !important; transition: background-color 0.3s ease, border-color 0.3s ease; }
+        header a, header span { color: var(--ll-text) !important; }
+        header button { color: var(--ll-text) !important; }
+        
         @keyframes float {
           0%, 100% { transform: translateY(0px) rotate(0deg); }
           33% { transform: translateY(-8px) rotate(0.5deg); }
