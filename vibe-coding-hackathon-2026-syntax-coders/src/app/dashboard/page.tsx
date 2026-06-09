@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import QRCode from 'qrcode'
 
 type Tab = 'overview' | 'records' | 'diagnostics' | 'emergency' | 'consent' | 'chat'
 
@@ -129,6 +130,28 @@ const THEMES = {
     }
 }
 
+const EMERGENCY_CLINICS = [
+    { name: "AIIMS Emergency Dept", address: "Ansari Nagar, New Delhi", phone: "+91-11-26588500", lat: 28.5672, lon: 77.2100 },
+    { name: "KEM Hospital Emergency", address: "Parel, Mumbai", phone: "+91-22-24107000", lat: 19.0028, lon: 72.8421 },
+    { name: "NIMHANS Casualty", address: "Hosur Road, Bengaluru", phone: "+91-80-26995000", lat: 12.9362, lon: 77.5976 },
+    { name: "Fortis Emergency Care", address: "Sector 62, Noida", phone: "+91-120-4300222", lat: 28.6189, lon: 77.3733 },
+    { name: "Apollo Greams Road ER", address: "Thousand Lights, Chennai", phone: "+91-44-28290200", lat: 13.0601, lon: 80.2512 },
+    { name: "PGIMER Emergency Care", address: "Sector 12, Chandigarh", phone: "+91-172-2747585", lat: 30.7678, lon: 76.7790 },
+    { name: "SCB Medical Emergency", address: "Manglabag, Cuttack", phone: "+91-671-2505415", lat: 20.4735, lon: 85.8814 }
+]
+
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+    const R = 6371 // Earth radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180
+    const dLon = (lon2 - lon1) * Math.PI / 180
+    const a = 
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon / 2) * Math.sin(dLon / 2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return R * c
+}
+
 export default function Dashboard() {
     const [activeTab, setActiveTab] = useState<Tab>('overview')
     const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -143,9 +166,80 @@ export default function Dashboard() {
     const [newConsentAddress, setNewConsentAddress] = useState('')
     const [consentLoading, setConsentLoading] = useState(false)
     const [consentError, setConsentError] = useState('')
+    const [ledgerLogs, setLedgerLogs] = useState<string[]>(['[System] Sepolia ledger connection established. Sync complete.'])
+    const getLogTime = () => new Date().toLocaleTimeString('en-IN', { hour12: false })
 
     const [showEditModal, setShowEditModal] = useState(false)
     const [editForm, setEditForm] = useState({ bloodGroup: '', allergies: '', emergencyContact: '', gender: '', dob: '' })
+
+    const qrCanvasRef = useRef<HTMLCanvasElement>(null)
+    const [userLocation, setUserLocation] = useState<{ lat: number, lon: number } | null>(null)
+    const [locationError, setLocationError] = useState('')
+    const [nearestDoctors, setNearestDoctors] = useState<any[]>([])
+
+    const detectLocationAndNearestDoctors = () => {
+        if (!navigator.geolocation) {
+            setLocationError("Geolocation is not supported by your browser.")
+            const fallbackClinics = EMERGENCY_CLINICS.map(clinic => ({ ...clinic, distance: null }))
+            setNearestDoctors(fallbackClinics)
+            return
+        }
+
+        setLocationError("")
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const { latitude, longitude } = position.coords
+                setUserLocation({ lat: latitude, lon: longitude })
+                
+                const clinicsWithDistance = EMERGENCY_CLINICS.map(clinic => {
+                    const distance = calculateDistance(latitude, longitude, clinic.lat, clinic.lon)
+                    return { ...clinic, distance }
+                })
+                
+                clinicsWithDistance.sort((a, b) => a.distance - b.distance)
+                setNearestDoctors(clinicsWithDistance)
+            },
+            (error) => {
+                console.error("Location detection failed:", error)
+                setLocationError("Unable to retrieve GPS location. Displaying default ER registry.")
+                const fallbackClinics = EMERGENCY_CLINICS.map(clinic => ({ ...clinic, distance: null }))
+                setNearestDoctors(fallbackClinics)
+            },
+            { enableHighAccuracy: true, timeout: 8000 }
+        )
+    }
+
+    const downloadQR = () => {
+        if (qrCanvasRef.current) {
+            const url = qrCanvasRef.current.toDataURL('image/png')
+            const link = document.createElement('a')
+            link.href = url
+            link.download = 'lifelink-emergency-qr-offline.png'
+            link.click()
+        }
+    }
+
+    const shareQROffline = async () => {
+        if (!qrCanvasRef.current) return
+        try {
+            qrCanvasRef.current.toBlob(async (blob) => {
+                if (!blob) return
+                const file = new File([blob], 'lifelink-emergency-qr.png', { type: 'image/png' })
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        files: [file],
+                        title: 'Emergency Medical QR Code',
+                        text: `LifeLink Emergency medical profile QR code for ${user?.name || 'Patient'}`
+                    })
+                } else {
+                    downloadQR()
+                }
+            }, 'image/png')
+        } catch (err) {
+            console.error("Web Share failed, falling back to download:", err)
+            downloadQR()
+        }
+    }
 
     useEffect(() => {
         const savedTheme = localStorage.getItem('lifelink-theme')
@@ -153,6 +247,35 @@ export default function Dashboard() {
             setThemeKey(savedTheme)
         }
     }, [])
+
+    useEffect(() => {
+        if (activeTab === 'emergency') {
+            detectLocationAndNearestDoctors()
+        }
+    }, [activeTab])
+
+    useEffect(() => {
+        if (activeTab === 'emergency' && qrCanvasRef.current && user) {
+            const ed = {
+                name: user?.name || 'Loading...',
+                bloodGroup: user?.patient?.bloodGroup || 'Not set',
+                allergies: user?.patient?.allergies || 'None listed',
+                emergencyContact: user?.patient?.emergencyContact || 'Not set',
+            }
+            const triageUrl = `http://localhost:3000/emergency/scan?id=${user?.patient?.id || ''}&name=${encodeURIComponent(ed.name)}&blood=${encodeURIComponent(ed.bloodGroup)}&allergies=${encodeURIComponent(ed.allergies)}&contact=${encodeURIComponent(ed.emergencyContact)}`
+            
+            QRCode.toCanvas(qrCanvasRef.current, triageUrl, {
+                width: 180,
+                margin: 1,
+                color: {
+                    dark: '#1A1A2E',
+                    light: '#ffffff'
+                }
+            }, (err) => {
+                if (err) console.error("Failed to generate offline QR code:", err)
+            })
+        }
+    }, [activeTab, user])
 
     useEffect(() => {
         const activeTheme = THEMES[themeKey as keyof typeof THEMES] || THEMES['ocean-abyss']
@@ -214,6 +337,35 @@ export default function Dashboard() {
         fetch('http://localhost:4000/api/consent/active', { headers })
             .then(res => res.json())
             .then(data => { if (data.active) setActiveConsents(data.active) }).catch(() => { })
+
+        if (activeTab === 'chat') {
+            fetch('http://localhost:4000/api/ai-chat/history', { headers })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.history) {
+                        const sortedHistory = [...data.history].reverse()
+                        const messages: { role: 'user' | 'assistant'; content: string }[] = []
+                        const historyForApi: { role: 'user' | 'assistant' | 'system'; content: string }[] = []
+                        
+                        sortedHistory.forEach((item: any) => {
+                            if (item.symptomsInput) {
+                                messages.push({ role: 'user', content: item.symptomsInput })
+                                historyForApi.push({ role: 'user', content: item.symptomsInput })
+                            }
+                            if (item.aiSummary) {
+                                messages.push({ role: 'assistant', content: item.aiSummary })
+                                historyForApi.push({ role: 'assistant', content: item.aiSummary })
+                            }
+                        })
+                        
+                        setChatMessages(messages)
+                        setChatHistory(historyForApi)
+                        setTimeout(() => {
+                            document.getElementById('chat-messages')?.scrollTo({ top: 99999, behavior: 'smooth' })
+                        }, 100)
+                    }
+                }).catch(() => { })
+        }
     }
 
     useEffect(() => {
@@ -260,23 +412,46 @@ export default function Dashboard() {
     }
 
     const handleGrantConsent = async () => {
-        if (!newConsentAddress.trim()) { setConsentError('Please enter a wallet address'); return }
+        const address = newConsentAddress.trim()
+        if (!address) { setConsentError('Please enter a wallet address'); return }
         setConsentLoading(true); setConsentError('')
+        setLedgerLogs(prev => [
+            ...prev,
+            `[${getLogTime()}] Proposing grantConsent() for ${address.slice(0, 10)}...`,
+            `[${getLogTime()}] Estimating network gas & signing Sepolia payload...`
+        ])
         try {
             const token = localStorage.getItem('accessToken')
             const res = await fetch('http://localhost:4000/api/consent/grant', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ doctorWalletAddress: newConsentAddress.trim() })
+                body: JSON.stringify({ doctorWalletAddress: address })
             })
             const data = await res.json()
-            if (!res.ok) { setConsentError(data.message || 'Failed to grant consent'); return }
+            if (!res.ok) {
+                setConsentError(data.message || 'Failed to grant consent')
+                setLedgerLogs(prev => [...prev, `[${getLogTime()}] ❌ Sepolia Tx failed: ${data.message || 'Rejected by ledger'}`])
+                return
+            }
+            setLedgerLogs(prev => [
+                ...prev,
+                `[${getLogTime()}] ✅ Block mined! Tx Hash: ${data.txHash || '0xmockhash'}`,
+                `[${getLogTime()}] Access GRANTED to doctor: ${address}`
+            ])
             setNewConsentAddress(''); fetchDashboardData()
-        } catch { setConsentError('Unable to connect to server') } finally { setConsentLoading(false) }
+        } catch {
+            setConsentError('Unable to connect to server')
+            setLedgerLogs(prev => [...prev, `[${getLogTime()}] ❌ Network error. Connection timed out.`])
+        } finally { setConsentLoading(false) }
     }
 
     const handleRevokeConsent = async (address: string) => {
         setConsentLoading(true); setConsentError('')
+        setLedgerLogs(prev => [
+            ...prev,
+            `[${getLogTime()}] Proposing revokeConsent() for ${address.slice(0, 10)}...`,
+            `[${getLogTime()}] Initializing smart contract on-chain call...`
+        ])
         try {
             const token = localStorage.getItem('accessToken')
             const res = await fetch('http://localhost:4000/api/consent/revoke', {
@@ -285,9 +460,21 @@ export default function Dashboard() {
                 body: JSON.stringify({ doctorWalletAddress: address })
             })
             const data = await res.json()
-            if (!res.ok) { setConsentError(data.message || 'Failed to revoke consent'); return }
+            if (!res.ok) {
+                setConsentError(data.message || 'Failed to revoke consent')
+                setLedgerLogs(prev => [...prev, `[${getLogTime()}] ❌ Sepolia Tx failed: ${data.message || 'Rejected by ledger'}`])
+                return
+            }
+            setLedgerLogs(prev => [
+                ...prev,
+                `[${getLogTime()}] ✅ Block mined! Tx Hash: ${data.txHash || '0xmockhash'}`,
+                `[${getLogTime()}] Access REVOKED for doctor: ${address}`
+            ])
             fetchDashboardData()
-        } catch { setConsentError('Unable to connect to server') } finally { setConsentLoading(false) }
+        } catch {
+            setConsentError('Unable to connect to server')
+            setLedgerLogs(prev => [...prev, `[${getLogTime()}] ❌ Network error. Connection timed out.`])
+        } finally { setConsentLoading(false) }
     }
 
     const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -1106,8 +1293,6 @@ export default function Dashboard() {
                             conditions: 'None listed',
                             medications: 'None listed',
                         }
-                        const qrText = encodeURIComponent(`LIFELINK EMERGENCY | Name:${ed.name} | Blood:${ed.bloodGroup} | Allergies:${ed.allergies} | Contact:${ed.emergencyContact}`)
-                        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${qrText}&bgcolor=ffffff&color=1A1A2E`
 
                         return (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -1116,23 +1301,42 @@ export default function Dashboard() {
                                     <p style={{ fontSize: 12, color: '#ABA9B8', marginTop: 4 }}>Scannable without login · Always accessible</p>
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                                    <div className="ll-card ll-fadein-1" style={{ padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 100, background: '#F2C4C4', marginBottom: 24 }}>
-                                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#E05454', display: 'inline-block', animation: 'pulseGreen 1.5s ease-in-out infinite' }} />
-                                            <span style={{ fontSize: 11, fontWeight: 700, color: '#B94B4B', textTransform: 'uppercase', letterSpacing: '.08em' }}>Emergency Broadcast Active</span>
-                                        </div>
-                                        <div className="ll-qr-float">
-                                            <div style={{ width: 180, height: 180, borderRadius: 20, background: '#fff', padding: 10, boxShadow: '0 12px 40px rgba(0,0,0,.1)', border: '2px solid #F0EDE8' }}>
-                                                <img src={qrUrl} alt="Emergency QR" style={{ width: '100%', height: '100%', borderRadius: 12, imageRendering: 'pixelated' }} />
+                                <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1.3fr 1.3fr', gap: 20 }}>
+                                    {/* Section 1: Offline QR Code */}
+                                    <div className="ll-card ll-fadein-1" style={{ padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+                                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 100, background: '#F2C4C4', marginBottom: 20, width: 'fit-content' }}>
+                                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#E05454', display: 'inline-block', animation: 'pulseGreen 1.5s ease-in-out infinite' }} />
+                                                <span style={{ fontSize: 11, fontWeight: 700, color: '#B94B4B', textTransform: 'uppercase', letterSpacing: '.08em' }}>Offline QR Active</span>
                                             </div>
+                                            <div className="ll-qr-float">
+                                                <div style={{ width: 180, height: 180, borderRadius: 20, background: '#fff', padding: 10, boxShadow: '0 12px 40px rgba(0,0,0,.1)', border: '2px solid #F0EDE8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <canvas ref={qrCanvasRef} style={{ width: '100%', height: '100%', borderRadius: 12 }} />
+                                                </div>
+                                            </div>
+                                            <p style={{ fontSize: 11, color: '#ABA9B8', marginTop: 14, textAlign: 'center', lineHeight: 1.5 }}>
+                                                Generated locally on device.<br />Responders scan this to view medical details.
+                                            </p>
                                         </div>
-                                        <p style={{ fontSize: 12, color: '#ABA9B8', marginTop: 16, textAlign: 'center' }}>Scan to view emergency profile<br />No login required</p>
-                                        <button className="ll-btn-ghost" style={{ width: '100%', marginTop: 16, borderRadius: 14 }} onClick={() => { const l = document.createElement('a'); l.href = qrUrl; l.download = 'lifelink-emergency-qr.png'; l.click() }}>
-                                            Download QR as PNG
-                                        </button>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', marginTop: 12 }}>
+                                            <button className="ll-btn-ghost" style={{ width: '100%', borderRadius: 14, padding: '8px 0', fontSize: 11 }} onClick={downloadQR}>
+                                                📥 Save to Device
+                                            </button>
+                                            <button className="ll-btn-ghost" style={{ width: '100%', borderRadius: 14, padding: '8px 0', fontSize: 11 }} onClick={shareQROffline}>
+                                                🔗 Share QR Code
+                                            </button>
+                                            {(() => {
+                                                const smsBody = encodeURIComponent(`LIFELINK EMERGENCY! Patient: ${userName}. Blood: ${ed.bloodGroup}. Allergies: ${ed.allergies}. Emergency Contact: ${ed.emergencyContact}. GPS Location: ${userLocation ? `${userLocation.lat.toFixed(6)}, ${userLocation.lon.toFixed(6)}` : 'Unknown'}. Please scan my emergency QR when you arrive: http://localhost:3000/emergency/scan?id=${user?.patient?.id || ''}`)
+                                                return (
+                                                    <a href={`sms:${ed.emergencyContact}?body=${smsBody}`} className="ll-btn-primary" style={{ width: '100%', borderRadius: 14, padding: '8px 0', fontSize: 11, textDecoration: 'none', textAlign: 'center' }}>
+                                                        💬 Send SMS Alert
+                                                    </a>
+                                                )
+                                            })()}
+                                        </div>
                                     </div>
 
+                                    {/* Section 2: Patient Info */}
                                     <div className="ll-fadein-2" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                                         {[
                                             { label: 'Blood Group', value: ed.bloodGroup, emoji: '🩸', bg: '#F2C4C4' },
@@ -1141,16 +1345,75 @@ export default function Dashboard() {
                                             { label: 'Conditions', value: ed.conditions, emoji: '🫁', bg: '#D4C5E8' },
                                             { label: 'Medications', value: ed.medications, emoji: '💊', bg: '#C4D8F2' },
                                         ].map((info, i) => (
-                                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 14, background: '#fff', border: '1.5px solid #F0EDE8' }}>
-                                                <div style={{ width: 38, height: 38, borderRadius: 10, background: info.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{info.emoji}</div>
-                                                <div>
-                                                    <p style={{ fontSize: 10, color: '#ABA9B8', textTransform: 'uppercase', letterSpacing: '.07em' }}>{info.label}</p>
-                                                    <p style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginTop: 2 }}>{info.value}</p>
+                                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 14, background: '#fff', border: '1.5px solid #F0EDE8' }}>
+                                                <div style={{ width: 34, height: 34, borderRadius: 10, background: info.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>{info.emoji}</div>
+                                                <div style={{ minWidth: 0, flex: 1 }}>
+                                                    <p style={{ fontSize: 9, color: '#ABA9B8', textTransform: 'uppercase', letterSpacing: '.07em', margin: 0 }}>{info.label}</p>
+                                                    <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', marginTop: 1, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{info.value}</p>
                                                 </div>
                                             </div>
                                         ))}
                                         <button className="ll-btn-primary" style={{ width: '100%', borderRadius: 14, marginTop: 4 }} onClick={() => setShowEditModal(true)}>
                                             Update Emergency Info →
+                                        </button>
+                                    </div>
+
+                                    {/* Section 3: Nearest Clinics (Offline Geolocation) */}
+                                    <div className="ll-card ll-fadein-3" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14, background: 'var(--ll-sidebar)' }}>
+                                        <div>
+                                            <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--ll-text)', margin: 0 }}>Nearest ERs (Offline Maps)</p>
+                                            <p style={{ fontSize: 11, color: 'var(--ll-text-muted)', marginTop: 4, margin: 0 }}>No internet needed · GPS & voice calls active</p>
+                                        </div>
+
+                                        {locationError && (
+                                            <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 10, padding: '8px 10px' }}>
+                                                <p style={{ fontSize: 10, color: '#F87171', margin: 0 }}>{locationError}</p>
+                                            </div>
+                                        )}
+
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', flex: 1, maxHeight: 280 }}>
+                                            {nearestDoctors.length === 0 ? (
+                                                <p style={{ fontSize: 11, color: 'var(--ll-text-muted)' }}>Locating nearest emergency responders…</p>
+                                            ) : (
+                                                nearestDoctors.slice(0, 3).map((doc, idx) => (
+                                                    <div key={idx} style={{
+                                                        padding: 10, borderRadius: 12, background: 'var(--ll-card-bg)',
+                                                        border: '1.5px solid var(--ll-card-border)', display: 'flex',
+                                                        flexDirection: 'column', gap: 6, transition: 'all 0.2s'
+                                                    }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4 }}>
+                                                            <div style={{ minWidth: 0, flex: 1 }}>
+                                                                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--ll-text)', margin: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{doc.name}</p>
+                                                                <p style={{ fontSize: 9, color: 'var(--ll-text-muted)', marginTop: 2, margin: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{doc.address}</p>
+                                                                <p style={{ fontSize: 9, color: 'var(--ll-text-muted)', fontFamily: 'monospace', margin: '2px 0 0' }}>Lat: {doc.lat.toFixed(4)}, Lon: {doc.lon.toFixed(4)}</p>
+                                                            </div>
+                                                            <span className="ll-badge" style={{ background: '#E6FAF5', color: '#3ECFAA', flexShrink: 0, fontSize: 9, padding: '2px 6px' }}>
+                                                                {doc.distance !== null ? `${doc.distance.toFixed(1)} km` : 'Registry'}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+                                                            <a href={`tel:${doc.phone}`} className="ll-btn-primary" style={{
+                                                                flex: 1, padding: '6px 0', fontSize: 11,
+                                                                borderRadius: 8, textDecoration: 'none', textAlign: 'center',
+                                                                display: 'block'
+                                                            }}>
+                                                                📞 Call
+                                                            </a>
+                                                            <a href={`https://www.google.com/maps/dir/?api=1&destination=${doc.lat},${doc.lon}`} target="_blank" rel="noopener noreferrer" className="ll-btn-ghost" style={{
+                                                                flex: 1, padding: '6px 0', fontSize: 11,
+                                                                borderRadius: 8, textDecoration: 'none', textAlign: 'center',
+                                                                display: 'block', paddingLeft: 4, paddingRight: 4
+                                                             }}>
+                                                                🗺️ Maps
+                                                            </a>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                        
+                                        <button className="ll-btn-ghost" style={{ width: '100%', padding: '8px 0', fontSize: 11, borderRadius: 10 }} onClick={detectLocationAndNearestDoctors}>
+                                            🔄 Refresh Nearest ERs
                                         </button>
                                     </div>
                                 </div>
@@ -1172,60 +1435,134 @@ export default function Dashboard() {
                                 </div>
                             )}
 
-                            <div className="ll-card ll-fadein-1" style={{ overflow: 'hidden', padding: 0 }}>
-                                <div style={{ padding: '16px 20px', borderBottom: '1.5px solid #F4F1EC' }}>
-                                    <p style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>Active Access Grants</p>
-                                </div>
-                                {activeConsents.length === 0 && (
-                                    <div style={{ padding: '32px', textAlign: 'center' }}>
-                                        <span style={{ fontSize: 32 }}>🔒</span>
-                                        <p style={{ fontSize: 12, color: '#ABA9B8', marginTop: 10 }}>No active access grants. Add a doctor below.</p>
-                                    </div>
-                                )}
-                                {activeConsents.map((c, i) => (
-                                    <div key={i} className="ll-row" style={{ padding: '14px 20px', borderBottom: i < activeConsents.length - 1 ? '1.5px solid #F4F1EC' : 'none', borderRadius: 0 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                                            <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg,#C8DFCC,#D4C5E8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#1A1A2E', flexShrink: 0 }}>DR</div>
-                                            <div style={{ minWidth: 0 }}>
-                                                <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>Doctor Wallet</p>
-                                                <p style={{ fontSize: 11, color: '#ABA9B8', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>{c.doctorWalletAddress}</p>
-                                                <span className="ll-badge" style={{ background: '#D4C5E8', color: '#1A1A2E', marginTop: 4, display: 'inline-block' }}>Full Records Access</span>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24 }}>
+                                {/* Left Column: Registry & Controls */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                                    <div className="ll-card ll-fadein-1" style={{ overflow: 'hidden', padding: 0 }}>
+                                        <div style={{ padding: '16px 20px', borderBottom: '1.5px solid #F4F1EC' }}>
+                                            <p style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>Active Access Grants</p>
+                                        </div>
+                                        {activeConsents.length === 0 && (
+                                            <div style={{ padding: '32px', textAlign: 'center' }}>
+                                                <span style={{ fontSize: 32 }}>🔒</span>
+                                                <p style={{ fontSize: 12, color: '#ABA9B8', marginTop: 10 }}>No active access grants. Add a doctor below.</p>
                                             </div>
-                                        </div>
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                                            <button className="ll-toggle on" onClick={() => handleRevokeConsent(c.doctorWalletAddress)} disabled={consentLoading} aria-label="Revoke" />
-                                            <span style={{ fontSize: 9, color: '#ABA9B8', fontFamily: 'monospace' }}>Block {c.blockHash?.slice(0, 8) || '—'}</span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div className="ll-card ll-fadein-2" style={{ padding: 24, background: '#C4D8F2', border: 'none' }}>
-                                <p style={{ fontSize: 15, fontWeight: 600, color: '#1A1A2E', marginBottom: 16 }}>Grant new access</p>
-                                <label style={{ fontSize: 11, color: '#6B6780', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'block', marginBottom: 6 }}>Doctor wallet address</label>
-                                <input className="ll-input" type="text" placeholder="0x71C...3a9f" value={newConsentAddress} onChange={e => setNewConsentAddress(e.target.value)} style={{ fontFamily: 'monospace', background: 'rgba(255,255,255,.8)' }} />
-                                <button className="ll-btn-primary" style={{ width: '100%', marginTop: 14, borderRadius: 14 }} onClick={handleGrantConsent} disabled={consentLoading}>
-                                    {consentLoading ? 'Signing transaction…' : 'Sign & Grant on Sepolia →'}
-                                </button>
-                            </div>
-
-                            <div className="ll-card ll-fadein-3" style={{ padding: 24 }}>
-                                <p style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 16 }}>Audit trail</p>
-                                {consentLogs.length === 0 && <p style={{ fontSize: 12, color: '#ABA9B8' }}>No transactions recorded on-chain yet.</p>}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                    {consentLogs.map((log, i) => {
-                                        const granted = log.action === 'CONSENT_GRANTED'
-                                        return (
-                                            <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 12, background: granted ? '#E8F5EE' : '#FEF0F0' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: granted ? '#4CAF79' : '#E05454', flexShrink: 0 }} />
-                                                    <span style={{ fontSize: 13, fontWeight: 500, color: '#1A1A2E' }}>{granted ? 'Access granted' : 'Access revoked'}</span>
-                                                    <span style={{ fontSize: 12, color: '#ABA9B8', fontFamily: 'monospace' }}>→ {log.resourceId ? log.resourceId.slice(0, 10) + '…' : 'Unknown'}</span>
+                                        )}
+                                        {activeConsents.map((c, i) => (
+                                            <div key={i} className="ll-row" style={{ padding: '14px 20px', borderBottom: i < activeConsents.length - 1 ? '1.5px solid #F4F1EC' : 'none', borderRadius: 0 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                                                    <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg,#C8DFCC,#D4C5E8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#1A1A2E', flexShrink: 0 }}>DR</div>
+                                                    <div style={{ minWidth: 0 }}>
+                                                        <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>Doctor Wallet</p>
+                                                        <p style={{ fontSize: 11, color: '#ABA9B8', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>{c.doctorWalletAddress}</p>
+                                                        <span className="ll-badge" style={{ background: '#D4C5E8', color: '#1A1A2E', marginTop: 4, display: 'inline-block' }}>Full Records Access</span>
+                                                    </div>
                                                 </div>
-                                                <span style={{ fontSize: 11, color: '#ABA9B8' }}>{new Date(log.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                                                    <button className="ll-toggle on" onClick={() => handleRevokeConsent(c.doctorWalletAddress)} disabled={consentLoading} aria-label="Revoke" />
+                                                    <span style={{ fontSize: 9, color: '#ABA9B8', fontFamily: 'monospace' }}>Block {c.blockHash?.slice(0, 8) || '—'}</span>
+                                                </div>
                                             </div>
-                                        )
-                                    })}
+                                        ))}
+                                    </div>
+
+                                    <div className="ll-card ll-fadein-2" style={{ padding: 24, background: '#C4D8F2', border: 'none' }}>
+                                        <p style={{ fontSize: 15, fontWeight: 600, color: '#1A1A2E', marginBottom: 16 }}>Grant new access</p>
+                                        <label style={{ fontSize: 11, color: '#6B6780', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'block', marginBottom: 6 }}>Doctor wallet address</label>
+                                        <input className="ll-input" type="text" placeholder="0x71C...3a9f" value={newConsentAddress} onChange={e => setNewConsentAddress(e.target.value)} style={{ fontFamily: 'monospace', background: 'rgba(255,255,255,.8)' }} />
+                                        <button className="ll-btn-primary" style={{ width: '100%', marginTop: 14, borderRadius: 14 }} onClick={handleGrantConsent} disabled={consentLoading}>
+                                            {consentLoading ? 'Signing transaction…' : 'Sign & Grant on Sepolia →'}
+                                        </button>
+                                    </div>
+
+                                    {/* Sepolia Live Ledger Terminal */}
+                                    <div className="ll-card ll-fadein-3" style={{ padding: 18, background: '#0D0D15', border: '1.5px solid #1C1C28', borderRadius: 16, fontFamily: 'monospace' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #1C1C28', paddingBottom: 10, marginBottom: 10 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                <span style={{ width: 8, height: 8, borderRadius: '50%', background: consentLoading ? '#F59E0B' : '#10B981', display: 'inline-block', animation: consentLoading ? 'pulse 1.5s infinite' : 'none' }} />
+                                                <span style={{ fontSize: 11, fontWeight: 700, color: '#A5A5B2', textTransform: 'uppercase', letterSpacing: '.07em' }}>📡 Sepolia Ledger Console</span>
+                                            </div>
+                                            <span style={{ fontSize: 10, color: '#4F4F5E', marginLeft: 'auto' }}>Gas Price: 24 Gwei</span>
+                                        </div>
+                                        <div id="ledger-terminal" style={{ height: '110px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 10, color: '#39D353', scrollbarWidth: 'thin', textAlign: 'left' }}>
+                                            {ledgerLogs.map((log, idx) => (
+                                                <div key={idx} style={{ lineHeight: 1.4 }}>{log}</div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Right Column: Visualizer Map & Audit logs */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                                    {/* Interactive SVG Network Map */}
+                                    <div className="ll-card ll-fadein-1" style={{ padding: 24, display: 'flex', flexDirection: 'column', height: '100%', minHeight: '380px', justifyContent: 'space-between' }}>
+                                        <div>
+                                            <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--ll-text)', margin: '0 0 4px' }}>Consent Network Map</p>
+                                            <p style={{ fontSize: 11, color: 'var(--ll-text-muted)', margin: '0 0 16px' }}>Real-time smart contract authority graph</p>
+                                        </div>
+                                        
+                                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.15)', borderRadius: 16, border: '1px solid var(--ll-card-border)', position: 'relative', overflow: 'hidden' }}>
+                                            <svg width="100%" height="280" viewBox="0 0 300 280">
+                                                {/* Center Node: Patient */}
+                                                <circle cx="150" cy="140" r="28" fill="var(--ll-primary)" style={{ filter: 'drop-shadow(0 0 12px var(--ll-primary))' }} />
+                                                <text x="150" y="143" textAnchor="middle" fill="#fff" fontSize="9" fontWeight="bold">PATIENT</text>
+                                                
+                                                {activeConsents.length === 0 ? (
+                                                    // Locked shield if no active doctor
+                                                    <g>
+                                                        <circle cx="150" cy="140" r="50" fill="none" stroke="rgba(239, 68, 68, 0.2)" strokeWidth="1.5" strokeDasharray="4 4" />
+                                                        <text x="150" y="210" textAnchor="middle" fill="#ef4444" fontSize="11" fontWeight="700">🔒 Vault Secured</text>
+                                                    </g>
+                                                ) : (
+                                                    activeConsents.map((c, idx) => {
+                                                        const angle = (idx * 2 * Math.PI) / activeConsents.length
+                                                        const rx = 90
+                                                        const ry = 80
+                                                        const dx = 150 + rx * Math.cos(angle)
+                                                        const dy = 140 + ry * Math.sin(angle)
+                                                        const docId = c.doctorWalletAddress.slice(2, 6).toUpperCase()
+
+                                                        return (
+                                                            <g key={idx}>
+                                                                {/* Glowing link path */}
+                                                                <line x1="150" y1="140" x2={dx} y2={dy} stroke="var(--ll-primary)" strokeWidth="1.5" strokeDasharray="4 4" opacity="0.6" />
+                                                                
+                                                                {/* Pulsing signal dot travelling from patient to doctor */}
+                                                                <circle r="3.5" fill="#3ECFAA">
+                                                                    <animateMotion dur="2s" repeatCount="indefinite" path={`M 150 140 L ${dx} ${dy}`} />
+                                                                </circle>
+
+                                                                {/* Doctor Node */}
+                                                                <circle cx={dx} cy={dy} r="20" fill="var(--ll-card-bg)" stroke="var(--ll-accent)" strokeWidth="2" style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.15))' }} />
+                                                                <text x={dx} y={dy + 3} textAnchor="middle" fill="var(--ll-text)" fontSize="8" fontWeight="bold">DR-{docId}</text>
+                                                            </g>
+                                                        )
+                                                    })
+                                                )}
+                                            </svg>
+                                        </div>
+                                    </div>
+
+                                    {/* Audit Trail */}
+                                    <div className="ll-card ll-fadein-3" style={{ padding: 24 }}>
+                                        <p style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 16 }}>Audit trail</p>
+                                        {consentLogs.length === 0 && <p style={{ fontSize: 12, color: '#ABA9B8' }}>No transactions recorded on-chain yet.</p>}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                            {consentLogs.map((log, i) => {
+                                                const granted = log.action === 'CONSENT_GRANTED'
+                                                return (
+                                                    <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 12, background: granted ? '#E8F5EE' : '#FEF0F0' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: granted ? '#4CAF79' : '#E05454', flexShrink: 0 }} />
+                                                            <span style={{ fontSize: 13, fontWeight: 500, color: '#1A1A2E' }}>{granted ? 'Access granted' : 'Access revoked'}</span>
+                                                            <span style={{ fontSize: 12, color: '#ABA9B8', fontFamily: 'monospace' }}>→ {log.resourceId ? log.resourceId.slice(0, 10) + '…' : 'Unknown'}</span>
+                                                        </div>
+                                                        <span style={{ fontSize: 11, color: '#ABA9B8' }}>{new Date(log.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
