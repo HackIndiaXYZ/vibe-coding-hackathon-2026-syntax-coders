@@ -1,133 +1,80 @@
-# LifeLink Backend
+# LifeLink 🏥
+### AI when it's enough. Real doctors when it's urgent.
 
-LifeLink is an AI-assisted healthcare coordination backend. The goal is to let AI handle first-level triage, medical report explanation, and emergency detection while escalating serious or uncertain cases to verified doctors.
+Built for HackIndia 2026 by **Syntax Coders**
 
-## Step 1: Backend Foundation
+---
 
-We created the first backend foundation with:
+## What is LifeLink?
 
-- TypeScript for safer code.
-- Express for the HTTP API.
-- Prisma for database schema and queries.
-- PostgreSQL as the main relational database.
-- Helmet and CORS for basic API security.
-- Zod for environment validation.
+LifeLink is a Web3 + AI healthcare platform that provides intelligent 
+health assistance, patient-owned medical records, and emergency doctor 
+connectivity — even when internet is unavailable.
 
-## Why This Matters
+---
 
-This project deals with healthcare-style data, so the backend must be designed carefully from the beginning. We separated users, patients, doctors, reports, AI analyses, appointments, consultations, emergency cases, and audit logs.
+## The Problem
 
-That separation makes the system easier to explain, secure, and scale.
+- 4.3 billion people lack access to essential healthcare
+- Medical records are fragmented across hospitals
+- Patients have zero control over their own health data
+- Emergency help is impossible in low-connectivity areas
+- Language barriers block effective healthcare communication
 
-## Current Folder Structure
+---
 
-```text
-src/
-  app.ts
-  server.ts
-  config/
-    env.ts
-  modules/
-    health/
-      health.routes.ts
-prisma/
-  schema.prisma
-docs/
-  01-backend-architecture.md
-```
+## Our Solution
 
-## How To Run Locally
+LifeLink combines AI, Blockchain, and IPFS to give patients full 
+ownership of their health data while making quality healthcare 
+accessible to everyone.
 
-Install dependencies:
+---
 
-```bash
-npm install
-```
+## Core Features
 
-Create a `.env` file using `.env.example` as the template.
+### 🤖 AI Health Companion
+- Symptom analysis and medical Q&A
+- Blood report and prescription understanding
+- Personalized health recommendations
+- Multilingual support (English, Hindi, Tamil)
 
-Build the project:
+### 🔐 Decentralized Health Records
+- Medical files stored on IPFS via Pinata
+- Patient owns and controls all their data
+- Encrypted and blockchain-verified
 
-```bash
-npm run build
-```
+### 🛡️ Smart Consent Management
+- Grant and revoke doctor access anytime
+- Temporary access with expiry dates
+- Full audit trail of every access event
 
-In PowerShell, if `npm` is blocked by execution policy, use:
+### 🚨 Emergency Beacon
+- One-tap SOS button
+- Generates encrypted emergency QR code
+- Works completely offline via Bluetooth
+- Nearby verified doctors receive instant alert
 
-```bash
-npm.cmd run build
-```
+### 👨‍⚕️ Doctor Workspace
+- Role-based dashboard for verified doctors
+- AI-powered patient risk scoring (HIGH/MEDIUM/LOW)
+- Secure medical vault viewer
+- Digital diagnosis and prescription system
+- Full audit terminal
 
-Run the development server:
+---
 
-```bash
-npm run dev
-```
+## Tech Stack
 
-Or in PowerShell:
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 14, React, TypeScript, Tailwind CSS |
+| Backend | Next.js API Routes, Node.js |
+| AI | Groq (LLaMA 3.3 70B) |
+| Database | PostgreSQL (Neon), Prisma ORM |
+| Blockchain | Base L2, Solidity, Hardhat, Ethers.js |
+| Storage | IPFS, Pinata |
+| Auth | JWT, Wallet Authentication |
+| Offline | Bluetooth Low Energy, QR Codes |
+| Deployment | Vercel, Railway |
 
-```bash
-npm.cmd run dev
-```
-
-Health check:
-
-```text
-GET http://localhost:4000/health
-```
-
-## Interview Explanation
-
-LifeLink has three main actors: patients, doctors, and admins. A user account stores authentication data. Patient and doctor profiles store role-specific information. Patients can upload medical reports and symptoms. AI analyzes the information and returns a risk level. Low-risk cases can receive guidance, while high-risk or uncertain cases are escalated to doctors.
-
-The AI is not the final medical authority. It is a decision-support layer. Doctors remain responsible for important medical decisions.
-
-## Next Step
-
-Step 2 has been added. It includes patient registration, doctor registration, login, JWT creation, auth middleware, and centralized error handling.
-
-Read:
-
-```text
-docs/02-authentication.md
-```
-
-## Next Step
-
-Step 3 is database setup and migrations:
-
-1. Install or connect PostgreSQL.
-2. Create the LifeLink database.
-3. Create a real `.env` file.
-4. Run Prisma migration.
-5. Test auth routes against the database.
-
-Read:
-
-```text
-docs/03-database-setup.md
-```
-
-Step 4 has also been added. It includes patient report metadata and AI symptom triage.
-
-Read:
-
-```text
-docs/04-reports-and-ai-triage.md
-```
-
-Step 5 has been added. It includes admin doctor verification, approved doctor listing, appointment booking, and consultation creation.
-
-Read:
-
-```text
-docs/05-doctor-admin-appointments.md
-```
-
-Step 6 has been added. It includes a seed script for creating the first admin.
-
-Read:
-
-```text
-docs/06-seeding-and-api-testing.md
-```
