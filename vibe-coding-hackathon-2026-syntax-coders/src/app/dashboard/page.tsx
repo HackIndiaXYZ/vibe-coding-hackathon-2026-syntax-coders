@@ -161,13 +161,14 @@ export default function Dashboard() {
     const [themeKey, setThemeKey] = useState<string>('ocean-abyss')
     const [showThemeDropdown, setShowThemeDropdown] = useState(false)
 
-    const [consentLogs, setConsentLogs] = useState<{ id: string; action: string; resourceId: string; createdAt: string }[]>([])
-    const [activeConsents, setActiveConsents] = useState<{ doctorWalletAddress: string; grantedAt: string; blockHash: string }[]>([])
-    const [newConsentAddress, setNewConsentAddress] = useState('')
+    const [consentLogs, setConsentLogs] = useState<any[]>([])
+    const [activeConsents, setActiveConsents] = useState<any[]>([])
+    const [doctorEmail, setDoctorEmail] = useState('')
+    const [doctorName, setDoctorName] = useState('')
+    const [expiresAt, setExpiresAt] = useState('')
+    const [successMessage, setSuccessMessage] = useState('')
     const [consentLoading, setConsentLoading] = useState(false)
     const [consentError, setConsentError] = useState('')
-    const [ledgerLogs, setLedgerLogs] = useState<string[]>(['[System] Sepolia ledger connection established. Sync complete.'])
-    const getLogTime = () => new Date().toLocaleTimeString('en-IN', { hour12: false })
 
     const [showEditModal, setShowEditModal] = useState(false)
     const [editForm, setEditForm] = useState({ bloodGroup: '', allergies: '', emergencyContact: '', gender: '', dob: '' })
@@ -176,6 +177,72 @@ export default function Dashboard() {
     const [userLocation, setUserLocation] = useState<{ lat: number, lon: number } | null>(null)
     const [locationError, setLocationError] = useState('')
     const [nearestDoctors, setNearestDoctors] = useState<any[]>([])
+
+    // Format date helper: "DD MMM YYYY"
+    const formatDate = (dateString: string | null) => {
+        if (!dateString) return 'Permanent'
+        const date = new Date(dateString)
+        const day = String(date.getDate()).padStart(2, '0')
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        const month = months[date.getMonth()]
+        const year = date.getFullYear()
+        return `Expires: ${day} ${month} ${year}`
+    }
+
+    // Format time helper: "Today 2:30 PM" or "12 Jun, 11:00 AM"
+    const formatTime = (dateString: string) => {
+        const date = new Date(dateString)
+        const now = new Date()
+
+        const isToday =
+            date.getDate() === now.getDate() &&
+            date.getMonth() === now.getMonth() &&
+            date.getFullYear() === now.getFullYear()
+
+        const hours24 = date.getHours()
+        const minutes = String(date.getMinutes()).padStart(2, '0')
+        const ampm = hours24 >= 12 ? 'PM' : 'AM'
+        const hours = hours24 % 12 || 12
+        const timeStr = `${hours}:${minutes} ${ampm}`
+
+        if (isToday) {
+            return `Today ${timeStr}`
+        } else {
+            const day = date.getDate()
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            const month = months[date.getMonth()]
+            return `${day} ${month}, ${timeStr}`
+        }
+    }
+
+    // Action text mapping
+    const getActionText = (action: string) => {
+        switch (action) {
+            case 'access_granted':
+                return 'was granted access'
+            case 'access_revoked':
+                return 'access was revoked'
+            case 'record_viewed':
+                return 'viewed your record'
+            default:
+                return action
+        }
+    }
+
+    // Action icon mapping
+    const getActionIcon = (action: string) => {
+        switch (action) {
+            case 'access_granted':
+                return '🔓'
+            case 'access_revoked':
+                return '🔒'
+            case 'record_viewed':
+                return '👁'
+            default:
+                return '📝'
+        }
+    }
+
 
     const detectLocationAndNearestDoctors = () => {
         if (!navigator.geolocation) {
@@ -330,13 +397,13 @@ export default function Dashboard() {
             .then(res => res.json())
             .then(data => { if (data.analyses) setPastAnalyses(data.analyses) }).catch(() => { })
 
-        fetch('http://localhost:4000/api/consent/logs', { headers })
+        fetch('/api/consent/logs', { headers })
             .then(res => res.json())
-            .then(data => { if (data.logs) setConsentLogs(data.logs) }).catch(() => { })
+            .then(data => { if (data.success && data.logs) setConsentLogs(data.logs) }).catch(() => { })
 
-        fetch('http://localhost:4000/api/consent/active', { headers })
+        fetch('/api/consent/list', { headers })
             .then(res => res.json())
-            .then(data => { if (data.active) setActiveConsents(data.active) }).catch(() => { })
+            .then(data => { if (data.success && data.consents) setActiveConsents(data.consents) }).catch(() => { })
 
         if (activeTab === 'chat') {
             fetch('http://localhost:4000/api/ai-chat/history', { headers })
@@ -411,70 +478,77 @@ export default function Dashboard() {
         } catch { setDiagError('Unable to connect to server') } finally { setDiagLoading(false) }
     }
 
-    const handleGrantConsent = async () => {
-        const address = newConsentAddress.trim()
-        if (!address) { setConsentError('Please enter a wallet address'); return }
-        setConsentLoading(true); setConsentError('')
-        setLedgerLogs(prev => [
-            ...prev,
-            `[${getLogTime()}] Proposing grantConsent() for ${address.slice(0, 10)}...`,
-            `[${getLogTime()}] Estimating network gas & signing Sepolia payload...`
-        ])
+    const handleGrantConsent = async (e: React.FormEvent) => {
+        e.preventDefault()
+        const token = localStorage.getItem('accessToken')
+        if (!token) return
+
+        setConsentError('')
+        setSuccessMessage('')
+        setConsentLoading(true)
+
         try {
-            const token = localStorage.getItem('accessToken')
-            const res = await fetch('http://localhost:4000/api/consent/grant', {
+            const res = await fetch('/api/consent/grant', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ doctorWalletAddress: address })
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    doctorEmail: doctorEmail.trim(),
+                    doctorName: doctorName.trim() || undefined,
+                    expiresAt: expiresAt || undefined,
+                }),
             })
+
             const data = await res.json()
+
             if (!res.ok) {
-                setConsentError(data.message || 'Failed to grant consent')
-                setLedgerLogs(prev => [...prev, `[${getLogTime()}] ❌ Sepolia Tx failed: ${data.message || 'Rejected by ledger'}`])
-                return
+                setConsentError(data.message || 'Failed to grant access')
+            } else {
+                setSuccessMessage('Access granted successfully!')
+                setDoctorEmail('')
+                setDoctorName('')
+                setExpiresAt('')
+                fetchDashboardData() // Refresh list & logs
             }
-            setLedgerLogs(prev => [
-                ...prev,
-                `[${getLogTime()}] ✅ Block mined! Tx Hash: ${data.txHash || '0xmockhash'}`,
-                `[${getLogTime()}] Access GRANTED to doctor: ${address}`
-            ])
-            setNewConsentAddress(''); fetchDashboardData()
-        } catch {
-            setConsentError('Unable to connect to server')
-            setLedgerLogs(prev => [...prev, `[${getLogTime()}] ❌ Network error. Connection timed out.`])
-        } finally { setConsentLoading(false) }
+        } catch (err) {
+            setConsentError('Could not connect to server. Please try again.')
+        } finally {
+            setConsentLoading(false)
+        }
     }
 
-    const handleRevokeConsent = async (address: string) => {
-        setConsentLoading(true); setConsentError('')
-        setLedgerLogs(prev => [
-            ...prev,
-            `[${getLogTime()}] Proposing revokeConsent() for ${address.slice(0, 10)}...`,
-            `[${getLogTime()}] Initializing smart contract on-chain call...`
-        ])
+    const handleRevokeConsent = async (consentId: string) => {
+        const token = localStorage.getItem('accessToken')
+        if (!token) return
+
+        if (!window.confirm('Are you sure you want to revoke access for this doctor?')) {
+            return
+        }
+
+        setConsentLoading(true)
         try {
-            const token = localStorage.getItem('accessToken')
-            const res = await fetch('http://localhost:4000/api/consent/revoke', {
+            const res = await fetch('/api/consent/revoke', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ doctorWalletAddress: address })
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ consentId }),
             })
-            const data = await res.json()
-            if (!res.ok) {
-                setConsentError(data.message || 'Failed to revoke consent')
-                setLedgerLogs(prev => [...prev, `[${getLogTime()}] ❌ Sepolia Tx failed: ${data.message || 'Rejected by ledger'}`])
-                return
+
+            if (res.ok) {
+                fetchDashboardData() // Refresh list & logs
+            } else {
+                const data = await res.json()
+                alert(data.message || 'Failed to revoke access')
             }
-            setLedgerLogs(prev => [
-                ...prev,
-                `[${getLogTime()}] ✅ Block mined! Tx Hash: ${data.txHash || '0xmockhash'}`,
-                `[${getLogTime()}] Access REVOKED for doctor: ${address}`
-            ])
-            fetchDashboardData()
-        } catch {
-            setConsentError('Unable to connect to server')
-            setLedgerLogs(prev => [...prev, `[${getLogTime()}] ❌ Network error. Connection timed out.`])
-        } finally { setConsentLoading(false) }
+        } catch (err) {
+            alert('Could not connect to server to revoke access.')
+        } finally {
+            setConsentLoading(false)
+        }
     }
 
     const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -1044,6 +1118,51 @@ export default function Dashboard() {
                                 ))}
                             </div>
 
+                            {/* Quick Actions Grid */}
+                            <div className="ll-fadein-2">
+                                <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--ll-text)', marginBottom: 14 }}>Quick Actions</p>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+                                    {([
+                                        { icon: '💬', title: 'AI Health Chat', subtitle: 'Chat with LLaMA assistant', onClick: () => setActiveTab('chat') },
+                                        { icon: '🚨', title: 'Emergency Beacon', subtitle: 'Offline QR & info', onClick: () => setActiveTab('emergency') },
+                                        { icon: '📋', title: 'Health Records', subtitle: 'View secure IPFS files', onClick: () => setActiveTab('records') },
+                                        { icon: '🛡️', title: 'Consent Manager', subtitle: 'Control record access', onClick: () => setActiveTab('consent') }
+                                    ] as { icon: string; title: string; subtitle: string; onClick?: () => void; href?: string }[]).map((action, i) => {
+                                        const cardContent = (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start', textAlign: 'left' }}>
+                                                <span style={{ fontSize: 24, marginBottom: 4 }}>{action.icon}</span>
+                                                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ll-text)' }}>{action.title}</span>
+                                                <span style={{ fontSize: 11, color: 'var(--ll-text-muted)' }}>{action.subtitle}</span>
+                                            </div>
+                                        );
+
+                                        if (action.href) {
+                                            return (
+                                                <Link 
+                                                    key={i} 
+                                                    href={action.href}
+                                                    className="ll-card"
+                                                    style={{ padding: 20, textDecoration: 'none', cursor: 'pointer', display: 'block' }}
+                                                >
+                                                    {cardContent}
+                                                </Link>
+                                            );
+                                        }
+
+                                        return (
+                                            <div 
+                                                key={i} 
+                                                className="ll-card" 
+                                                onClick={action.onClick}
+                                                style={{ padding: 20, cursor: 'pointer' }}
+                                            >
+                                                {cardContent}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
                             {/* ECG + Activity */}
                             <div className="ll-fadein-2" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
                                 <div className="ll-card" style={{ padding: 24, background: 'var(--ll-card-bg)', border: '1.5px solid var(--ll-card-border)' }}>
@@ -1134,7 +1253,35 @@ export default function Dashboard() {
                                     const acts: { emoji: string; title: string; sub: string; time: string; ts: number; bg: string }[] = []
                                     myReports.forEach(r => acts.push({ emoji: '📄', title: `${r.fileName || 'Report'} uploaded`, sub: r.ipfsCid ? `IPFS · ${r.ipfsCid.slice(0, 8)}…` : 'Local', time: new Date(r.uploadedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }), ts: new Date(r.uploadedAt).getTime(), bg: '#D4C5E8' }))
                                     pastAnalyses.forEach(a => acts.push({ emoji: '🤖', title: 'AI diagnostic completed', sub: `Risk: ${a.riskLevel}`, time: new Date(a.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }), ts: new Date(a.createdAt).getTime(), bg: '#C8DFCC' }))
-                                    consentLogs.forEach(c => acts.push({ emoji: '⛓️', title: c.action === 'CONSENT_GRANTED' ? 'Consent granted' : 'Consent revoked', sub: `Doctor: ${c.resourceId ? c.resourceId.slice(0, 10) + '…' : 'Unknown'}`, time: new Date(c.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }), ts: new Date(c.createdAt).getTime(), bg: c.action === 'CONSENT_GRANTED' ? '#F5E6C8' : '#F2C4C4' }))
+                                    consentLogs.forEach(c => {
+                                        const doctorDisplay = c.doctorName || c.doctorEmail || 'Unknown Doctor';
+                                        let title = 'Consent event';
+                                        let bg = 'var(--ll-accent)';
+                                        let emoji = '⛓️';
+                                        
+                                        if (c.action === 'access_granted') {
+                                            title = 'Access granted';
+                                            bg = '#F5E6C8';
+                                            emoji = '🔓';
+                                        } else if (c.action === 'access_revoked') {
+                                            title = 'Access revoked';
+                                            bg = '#F2C4C4';
+                                            emoji = '🔒';
+                                        } else if (c.action === 'record_viewed') {
+                                            title = 'Record viewed';
+                                            bg = '#C4D8F2';
+                                            emoji = '👁️';
+                                        }
+                                        
+                                        acts.push({
+                                            emoji,
+                                            title,
+                                            sub: `Doctor: ${doctorDisplay}`,
+                                            time: new Date(c.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+                                            ts: new Date(c.createdAt).getTime(),
+                                            bg
+                                        });
+                                    })
                                     acts.sort((a, b) => b.ts - a.ts)
                                     const recent = acts.slice(0, 4)
                                     if (!recent.length) return <p style={{ fontSize: 13, color: '#ABA9B8', fontFamily: "'DM Sans', sans-serif" }}>No recent activity.</p>
@@ -1425,70 +1572,75 @@ export default function Dashboard() {
                     {activeTab === 'consent' && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                             <div className="ll-fadein">
-                                <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 28, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>Consent Logs</h2>
-                                <p style={{ fontSize: 12, color: '#ABA9B8', marginTop: 4 }}>On-chain access control · Sepolia testnet</p>
+                                <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 28, fontWeight: 700, color: 'var(--ll-text)', margin: 0 }}>Consent Management</h2>
+                                <p style={{ fontSize: 12, color: 'var(--ll-text-muted)', marginTop: 4 }}>Control who can access your medical records in real-time</p>
                             </div>
-
-                            {consentError && (
-                                <div style={{ background: '#FEE', border: '1.5px solid #F2C4C4', borderRadius: 12, padding: '10px 14px' }}>
-                                    <p style={{ fontSize: 12, color: '#B94B4B', margin: 0 }}>{consentError}</p>
-                                </div>
-                            )}
 
                             <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24 }}>
                                 {/* Left Column: Registry & Controls */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                                    
+                                    {/* Who Has Access */}
                                     <div className="ll-card ll-fadein-1" style={{ overflow: 'hidden', padding: 0 }}>
-                                        <div style={{ padding: '16px 20px', borderBottom: '1.5px solid #F4F1EC' }}>
-                                            <p style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>Active Access Grants</p>
+                                        <div style={{ padding: '16px 20px', borderBottom: '1.5px solid var(--ll-card-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--ll-text)', margin: 0 }}>Who Has Access</p>
+                                            <span className="ll-badge" style={{ background: 'var(--ll-primary)', color: '#fff' }}>{activeConsents.length}</span>
                                         </div>
                                         {activeConsents.length === 0 && (
                                             <div style={{ padding: '32px', textAlign: 'center' }}>
                                                 <span style={{ fontSize: 32 }}>🔒</span>
-                                                <p style={{ fontSize: 12, color: '#ABA9B8', marginTop: 10 }}>No active access grants. Add a doctor below.</p>
+                                                <p style={{ fontSize: 12, color: 'var(--ll-text-muted)', marginTop: 10, marginBottom: 0 }}>No active access grants. Add a doctor below.</p>
                                             </div>
                                         )}
                                         {activeConsents.map((c, i) => (
-                                            <div key={i} className="ll-row" style={{ padding: '14px 20px', borderBottom: i < activeConsents.length - 1 ? '1.5px solid #F4F1EC' : 'none', borderRadius: 0 }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                                            <div key={c.id} className="ll-row" style={{ padding: '14px 20px', borderBottom: i < activeConsents.length - 1 ? '1.5px solid var(--ll-card-border)' : 'none', borderRadius: 0 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
                                                     <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg,#C8DFCC,#D4C5E8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#1A1A2E', flexShrink: 0 }}>DR</div>
-                                                    <div style={{ minWidth: 0 }}>
-                                                        <p style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>Doctor Wallet</p>
-                                                        <p style={{ fontSize: 11, color: '#ABA9B8', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>{c.doctorWalletAddress}</p>
-                                                        <span className="ll-badge" style={{ background: '#D4C5E8', color: '#1A1A2E', marginTop: 4, display: 'inline-block' }}>Full Records Access</span>
+                                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                                        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--ll-text)', margin: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{c.doctorName || 'General Practitioner'}</p>
+                                                        <p style={{ fontSize: 11, color: 'var(--ll-text-muted)', margin: '2px 0 0', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{c.doctorEmail}</p>
+                                                        <span className="ll-badge" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3B82F6', marginTop: 6, display: 'inline-block', fontSize: 10 }}>{formatDate(c.expiresAt)}</span>
                                                     </div>
                                                 </div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                                                    <button className="ll-toggle on" onClick={() => handleRevokeConsent(c.doctorWalletAddress)} disabled={consentLoading} aria-label="Revoke" />
-                                                    <span style={{ fontSize: 9, color: '#ABA9B8', fontFamily: 'monospace' }}>Block {c.blockHash?.slice(0, 8) || '—'}</span>
-                                                </div>
+                                                <button className="ll-btn-ghost" style={{ padding: '6px 12px', fontSize: 12, color: '#EF4444', borderColor: 'rgba(239,68,68,0.2)', flexShrink: 0 }} onClick={() => handleRevokeConsent(c.id)} disabled={consentLoading}>
+                                                    Revoke
+                                                </button>
                                             </div>
                                         ))}
                                     </div>
 
-                                    <div className="ll-card ll-fadein-2" style={{ padding: 24, background: '#C4D8F2', border: 'none' }}>
-                                        <p style={{ fontSize: 15, fontWeight: 600, color: '#1A1A2E', marginBottom: 16 }}>Grant new access</p>
-                                        <label style={{ fontSize: 11, color: '#6B6780', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'block', marginBottom: 6 }}>Doctor wallet address</label>
-                                        <input className="ll-input" type="text" placeholder="0x71C...3a9f" value={newConsentAddress} onChange={e => setNewConsentAddress(e.target.value)} style={{ fontFamily: 'monospace', background: 'rgba(255,255,255,.8)' }} />
-                                        <button className="ll-btn-primary" style={{ width: '100%', marginTop: 14, borderRadius: 14 }} onClick={handleGrantConsent} disabled={consentLoading}>
-                                            {consentLoading ? 'Signing transaction…' : 'Sign & Grant on Sepolia →'}
-                                        </button>
-                                    </div>
-
-                                    {/* Sepolia Live Ledger Terminal */}
-                                    <div className="ll-card ll-fadein-3" style={{ padding: 18, background: '#0D0D15', border: '1.5px solid #1C1C28', borderRadius: 16, fontFamily: 'monospace' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #1C1C28', paddingBottom: 10, marginBottom: 10 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                <span style={{ width: 8, height: 8, borderRadius: '50%', background: consentLoading ? '#F59E0B' : '#10B981', display: 'inline-block', animation: consentLoading ? 'pulse 1.5s infinite' : 'none' }} />
-                                                <span style={{ fontSize: 11, fontWeight: 700, color: '#A5A5B2', textTransform: 'uppercase', letterSpacing: '.07em' }}>📡 Sepolia Ledger Console</span>
+                                    {/* Grant New Access */}
+                                    <div className="ll-card ll-fadein-2" style={{ padding: 24 }}>
+                                        <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--ll-text)', marginBottom: 16, marginTop: 0 }}>Grant new access</p>
+                                        <form onSubmit={handleGrantConsent} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                                            <div>
+                                                <label style={{ fontSize: 11, color: 'var(--ll-text-muted)', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'block', marginBottom: 6 }}>Doctor Email *</label>
+                                                <input className="ll-input" required type="email" placeholder="doctor@hospital.com" value={doctorEmail} onChange={e => setDoctorEmail(e.target.value)} />
                                             </div>
-                                            <span style={{ fontSize: 10, color: '#4F4F5E', marginLeft: 'auto' }}>Gas Price: 24 Gwei</span>
-                                        </div>
-                                        <div id="ledger-terminal" style={{ height: '110px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 10, color: '#39D353', scrollbarWidth: 'thin', textAlign: 'left' }}>
-                                            {ledgerLogs.map((log, idx) => (
-                                                <div key={idx} style={{ lineHeight: 1.4 }}>{log}</div>
-                                            ))}
-                                        </div>
+                                            <div>
+                                                <label style={{ fontSize: 11, color: 'var(--ll-text-muted)', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'block', marginBottom: 6 }}>Doctor Name (Optional)</label>
+                                                <input className="ll-input" type="text" placeholder="Dr. Rajesh Sharma" value={doctorName} onChange={e => setDoctorName(e.target.value)} />
+                                            </div>
+                                            <div>
+                                                <label style={{ fontSize: 11, color: 'var(--ll-text-muted)', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'block', marginBottom: 6 }}>Access Expiry Date (Optional)</label>
+                                                <input className="ll-input" type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)} min={new Date().toISOString().split('T')[0]} />
+                                            </div>
+                                            
+                                            {successMessage && (
+                                                <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1.5px solid rgba(16, 185, 129, 0.2)', borderRadius: 12, padding: '10px 14px' }}>
+                                                    <p style={{ fontSize: 12, color: '#10B981', margin: 0, fontWeight: 600 }}>{successMessage}</p>
+                                                </div>
+                                            )}
+                                            {consentError && (
+                                                <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1.5px solid rgba(239, 68, 68, 0.2)', borderRadius: 12, padding: '10px 14px' }}>
+                                                    <p style={{ fontSize: 12, color: '#EF4444', margin: 0, fontWeight: 600 }}>{consentError}</p>
+                                                </div>
+                                            )}
+
+                                            <button type="submit" className="ll-btn-primary" style={{ width: '100%', marginTop: 8, borderRadius: 14 }} disabled={consentLoading}>
+                                                {consentLoading ? 'Granting Access...' : 'Grant Access →'}
+                                            </button>
+                                        </form>
                                     </div>
                                 </div>
 
@@ -1520,7 +1672,7 @@ export default function Dashboard() {
                                                         const ry = 80
                                                         const dx = 150 + rx * Math.cos(angle)
                                                         const dy = 140 + ry * Math.sin(angle)
-                                                        const docId = c.doctorWalletAddress.slice(2, 6).toUpperCase()
+                                                        const docId = (c.doctorName || c.doctorEmail || '').slice(0, 4).toUpperCase()
 
                                                         return (
                                                             <g key={idx}>
@@ -1545,19 +1697,20 @@ export default function Dashboard() {
 
                                     {/* Audit Trail */}
                                     <div className="ll-card ll-fadein-3" style={{ padding: 24 }}>
-                                        <p style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', marginBottom: 16 }}>Audit trail</p>
-                                        {consentLogs.length === 0 && <p style={{ fontSize: 12, color: '#ABA9B8' }}>No transactions recorded on-chain yet.</p>}
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                        <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--ll-text)', marginBottom: 16, marginTop: 0 }}>Audit trail</p>
+                                        {consentLogs.length === 0 && <p style={{ fontSize: 12, color: 'var(--ll-text-muted)', margin: 0 }}>No transactions recorded yet.</p>}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
                                             {consentLogs.map((log, i) => {
-                                                const granted = log.action === 'CONSENT_GRANTED'
+                                                const doctorDisplay = log.doctorName || log.doctorEmail || 'Unknown';
                                                 return (
-                                                    <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 12, background: granted ? '#E8F5EE' : '#FEF0F0' }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: granted ? '#4CAF79' : '#E05454', flexShrink: 0 }} />
-                                                            <span style={{ fontSize: 13, fontWeight: 500, color: '#1A1A2E' }}>{granted ? 'Access granted' : 'Access revoked'}</span>
-                                                            <span style={{ fontSize: 12, color: '#ABA9B8', fontFamily: 'monospace' }}>→ {log.resourceId ? log.resourceId.slice(0, 10) + '…' : 'Unknown'}</span>
+                                                    <div key={log.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 12, background: 'var(--ll-sidebar)', border: '1.5px solid var(--ll-card-border)' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                                                            <span style={{ fontSize: 16, flexShrink: 0 }}>{getActionIcon(log.action)}</span>
+                                                            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ll-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+                                                                <strong>{doctorDisplay}</strong> {getActionText(log.action)}
+                                                            </span>
                                                         </div>
-                                                        <span style={{ fontSize: 11, color: '#ABA9B8' }}>{new Date(log.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                                                        <span style={{ fontSize: 11, color: 'var(--ll-text-muted)', flexShrink: 0 }}>{formatTime(log.createdAt)}</span>
                                                     </div>
                                                 )
                                             })}
