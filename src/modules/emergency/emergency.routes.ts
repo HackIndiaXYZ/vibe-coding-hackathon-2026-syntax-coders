@@ -5,8 +5,11 @@ import { requireAuth, requireRole } from "../auth/auth.middleware";
 
 const emergencyRoutes = Router();
 
-// Public route for first responders
+// Public routes for emergency scanned page
 emergencyRoutes.get("/beacon/:token", asyncHandler(emergencyController.getBeacon));
+emergencyRoutes.get("/doctors", asyncHandler(emergencyController.publicDoctors));
+emergencyRoutes.post("/public-checkin", asyncHandler(emergencyController.publicCheckin));
+emergencyRoutes.post("/public-appointment", asyncHandler(emergencyController.publicAppointment));
 
 // Protected patient routes
 emergencyRoutes.use(requireAuth, requireRole("PATIENT"));

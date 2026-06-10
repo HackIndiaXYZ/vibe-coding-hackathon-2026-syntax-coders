@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import QRCode from 'qrcode'
+import DoctorWorkspace from '@/components/DoctorWorkspace'
 
 type Tab = 'overview' | 'records' | 'diagnostics' | 'emergency' | 'consent' | 'chat'
 
@@ -619,14 +620,20 @@ export default function Dashboard() {
             .finally(() => setChatLoading(false))
     }
 
-    const navItems: { id: Tab; label: string; emoji: string }[] = [
-        { id: 'overview', label: 'Overview', emoji: '🏠' },
-        { id: 'records', label: 'Health Records', emoji: '📋' },
-        { id: 'diagnostics', label: 'AI Diagnostics', emoji: '🔬' },
-        { id: 'emergency', label: 'Emergency Beacon', emoji: '🚨' },
-        { id: 'consent', label: 'Consent Logs', emoji: '🔗' },
-        { id: 'chat', label: 'AI Health Chat', emoji: '💬' },
-    ]
+    const isDoctor = userRole === 'DOCTOR'
+
+    const navItems: { id: Tab; label: string; emoji: string }[] = isDoctor
+        ? [
+            { id: 'overview', label: 'Workspace', emoji: '🩺' },
+        ]
+        : [
+            { id: 'overview', label: 'Overview', emoji: '🏠' },
+            { id: 'records', label: 'Health Records', emoji: '📋' },
+            { id: 'diagnostics', label: 'AI Diagnostics', emoji: '🔬' },
+            { id: 'emergency', label: 'Emergency Beacon', emoji: '🚨' },
+            { id: 'consent', label: 'Consent Logs', emoji: '🔗' },
+            { id: 'chat', label: 'AI Health Chat', emoji: '💬' },
+        ]
 
     /* ── pastel card accent map ── */
     const tabAccent: Record<Tab, string> = {
@@ -1032,7 +1039,12 @@ export default function Dashboard() {
                 {/* Content */}
                 <div style={{ flex: 1, overflowY: 'auto', padding: '28px 28px 40px', zIndex: 1 }}>
 
-                    {activeTab === 'overview' && (
+                    {/* ─── DOCTOR WORKSPACE ─── */}
+                    {isDoctor && (
+                        <DoctorWorkspace user={user} />
+                    )}
+
+                    {!isDoctor && activeTab === 'overview' && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                             {/* Hero greeting */}
                             <div className="ll-fadein" style={{
@@ -1303,7 +1315,7 @@ export default function Dashboard() {
                     )}
 
                     {/* ══ HEALTH RECORDS ══ */}
-                    {activeTab === 'records' && (
+                    {!isDoctor && activeTab === 'records' && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                             <div className="ll-fadein" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
                                 <div>
@@ -1363,7 +1375,7 @@ export default function Dashboard() {
                     )}
 
                     {/* ══ AI DIAGNOSTICS ══ */}
-                    {activeTab === 'diagnostics' && (
+                    {!isDoctor && activeTab === 'diagnostics' && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                             <div className="ll-fadein">
                                 <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 28, fontWeight: 700, color: '#1A1A2E', margin: 0 }}>AI Diagnostic Engine</h2>
@@ -1431,7 +1443,7 @@ export default function Dashboard() {
                     )}
 
                     {/* ══ EMERGENCY BEACON ══ */}
-                    {activeTab === 'emergency' && (() => {
+                    {!isDoctor && activeTab === 'emergency' && (() => {
                         const ed = {
                             name: userName,
                             bloodGroup: user?.patient?.bloodGroup || 'Not set',
@@ -1569,7 +1581,7 @@ export default function Dashboard() {
                     })()}
 
                     {/* ══ CONSENT LOGS ══ */}
-                    {activeTab === 'consent' && (
+                    {!isDoctor && activeTab === 'consent' && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                             <div className="ll-fadein">
                                 <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 28, fontWeight: 700, color: 'var(--ll-text)', margin: 0 }}>Consent Management</h2>
@@ -1722,7 +1734,7 @@ export default function Dashboard() {
                     )}
 
                     {/* ══ AI CHAT ══ */}
-                    {activeTab === 'chat' && (
+                    {!isDoctor && activeTab === 'chat' && (
                         <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 160px)', gap: 0 }}>
                             <div className="ll-fadein" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

@@ -21,6 +21,8 @@ model User {
   patient   Patient?
   doctor    Doctor?
   auditLogs AuditLog[]
+  consents    Consent[]    @relation("PatientConsents")
+  accessLogs  AccessLog[]  @relation("PatientAccessLogs")
 }
 
 model Patient {
@@ -152,4 +154,26 @@ model AuditLog {
   createdAt    DateTime @default(now())
 
   actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+}
+
+model Consent {
+  id          String    @id @default(cuid())
+  patientId   String
+  doctorEmail String
+  doctorName  String?
+  expiresAt   DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  patient     User      @relation("PatientConsents", fields: [patientId], references: [id])
+}
+
+model AccessLog {
+  id          String   @id @default(cuid())
+  patientId   String
+  doctorEmail String
+  doctorName  String?
+  action      String
+  recordName  String?
+  createdAt   DateTime @default(now())
+  patient     User     @relation("PatientAccessLogs", fields: [patientId], references: [id])
 }
